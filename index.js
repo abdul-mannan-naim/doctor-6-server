@@ -13,8 +13,12 @@ app.use(express.json())
 
 
 
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.fgwma2r.mongodb.net/?retryWrites=true&w=majority`;
-const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.1zdgrcr.mongodb.net/?retryWrites=true&w=majority`;
+const client = new MongoClient(uri,
+     { useNewUrlParser: true,
+         useUnifiedTopology: true,
+          serverApi: ServerApiVersion.v1 });
+           
 
 
 function verifyJWT(req, res, next) {
@@ -38,70 +42,59 @@ jwt.verify(token, process.env.ACCESS_TOKEN, function(err,decoded){
 
 async function run() {
     try {
-        const appointmentOptionCollection = client.db('doctorsPortal').collection("appointOptions")
-        const bookingsCollection = client.db('doctorsPortal').collection("bookings")
-        const usersCollection = client.db('doctorsPortal').collection("users")
+        const usersCollection = client.db('mobile').collection('users')
+        const productsCollection = client.db('mobile').collection('products')
 
-        app.get('/appointmentOptions', async (req, res) => {
-            const date = req.query.date;
-            const query = {}
-            const options = await appointmentOptionCollection.find(query).toArray()
-            const bookingQuery = { appointmentDate: date }
-            const alreadyBooked = await bookingsCollection.find(bookingQuery).toArray()
-            options.forEach(option => {
-                const optionBooked = alreadyBooked.filter(book => book.treatment === option.name)
-                const bookedSlots = optionBooked.map(book => book.slot)
-                const remainingSlots = option.slots.filter(slot => !bookedSlots.includes(slot))
-                option.slots = remainingSlots
-            })
-            res.send(options)
-        })
 
-        app.get('/bookings',  async (req, res) => {
-            const email = req.query.email;
-            // const decodedEamil =req.decoded.email;
-            // if(email !==decodedEamil){
-            //     return res.status(403).send({message:"forbidden access"})
-            // }
-            const query = { email: email }
-            const bookings = await bookingsCollection.find(query).toArray()
-            res.send(bookings)
-        })
-
-        app.post('/bookings', async (req, res) => {
-            const booking = req.body;
-            const query = {
-                appointmentDate: booking.appointmentDate,
-                treatment: booking.treatment,
-                email: booking.email,
-            }
-
-            const alreadyBooked = await bookingsCollection.find(query).toArray()
-
-            if (alreadyBooked.length) {
-                const message = `You already have a booking on ${booking.appointmentDate}`
-                return res.send({ acknowledged: false, message })
-            }
-            const result = await bookingsCollection.insertOne(booking)
-            res.send(result)
-        })
-
-        app.get('/jwt', async (req, res) => {
-            const email = req.query.email;
-            const query = { email: email };
-            const user = await usersCollection.findOne(query)
-            if (user) {
-                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, { expiresIn: "1h" })
-                return res.send({ accessToken: token })
-            }
-            res.status(403).send({ accessToken: "" })
-        })
-
-        app.post('/users', async (req, res) => {
+        app.put('/user/:email', async (req, res) => {
+            const email = req.params.email;
             const user = req.body;
-            const result = await usersCollection.insertOne(user)
+            const filter = { email: email }
+            const options = { upsert: true }
+            const doc = {
+                $set: user,
+            }
+            const result = await usersCollection.updateOne(filter, doc, options)
+            const token = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "1h" })
+            res.send({ result, token })
+        })
+
+
+        //   Post A product to database...
+        app.post('/product', async (req, res) => {
+            const query = req.body;
+            const result = await productsCollection.insertOne(query)
             res.send(result)
         })
+        //   get a product from database...
+        app.get('/getProduct', async (req, res) => {
+            const query = {};
+            const result = await productsCollection.find(query).toArray()
+            res.send(result)
+        })
+        //   Post A product to database...
+        app.put('/update/:id', async (req, res) => {
+            const id = new ObjectId(req.params.id);
+            const query = req.body;
+            const filter = { _id: id }
+            const options = { upsert: true };
+            const doc = {
+                $set: query
+            }
+            const result = await productsCollection.updateOne(filter, doc, options)
+            res.send(result)
+
+        })
+        //   delete a product from database...
+        app.delete('/delete/:id', async (req, res) => {
+            const id = new ObjectId(req.params.id);
+            const filter = { _id: id }
+            const result = await productsCollection.deleteOne(filter);
+            res.send(result)
+        })
+   
+      
+       
 
     } finally {
 
